@@ -89,8 +89,8 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
 
         OpenM_Log::debug("request=" . $_SERVER["REQUEST_URI"], __CLASS__, __METHOD__, __LINE__);
         OpenM_Log::debug("waited parameters: mode=" . $request->mode . " identity=" . $request->identity . " immediate=" . $request->immediate . " claimed_id=" . $request->claimed_id, __CLASS__, __METHOD__, __LINE__);
-        if ($request->mode == 'checkid_setup' && $request->identity && !$request->immediate && self::isOIDValid($request->claimed_id)) {
-            $oid = $request->claimed_id;
+        if ($request->mode == 'checkid_setup' && $request->identity && !$request->immediate && (self::isOIDValid($request->claimed_id) || self::isOIDValid($request->identity))) {
+            $oid = (String::isString($request->claimed_id) && $request->claimed_id !== "") ? $request->claimed_id : $request->identity;
             OpenM_Log::debug("Identity check", __CLASS__, __METHOD__, __LINE__);
             $user = OpenM_ID_ConnectedUserController::get();
             if ($user == null)
