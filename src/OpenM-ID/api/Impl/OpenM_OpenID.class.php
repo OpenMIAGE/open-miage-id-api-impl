@@ -11,7 +11,6 @@ Import::php("util.http.OpenM_URL");
 Import::php("OpenM-Services.api.Impl.OpenM_ServiceImpl");
 Import::php("util.Properties");
 Import::php("OpenM-ID.api.OpenM_ID_Tool");
-Import::php("OpenM-ID.api.Impl.OpenM_ID_Account");
 Import::php("OpenM-ID.api.Impl.OpenM_ID_ConnectedUserController");
 Import::php("util.OpenM_Log");
 
@@ -42,6 +41,10 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
     const TOKEN_DEFAULT_ACTIVATION = "OpenM_OpenID.token.activation.default";
     const TOKEN_DEFAULT_ACTIVATION_TRUE = "true";
 
+    /**
+     *
+     * @var type Auth_OpenID_Server
+     */
     private static $server;
     private static $init = false;
     private static $secret;
@@ -94,14 +97,14 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
             OpenM_Log::debug("Identity check", __CLASS__, __METHOD__, __LINE__);
             $user = OpenM_ID_ConnectedUserController::get();
             if ($user == null)
-                OpenM_ID_Account::errorDisplay("no user connected");
+                self::returnError();
             if (!$user->get(OpenM_UserDAO::USER_IS_VALID))
-                OpenM_ID_Account::errorDisplay("user not valid");
+                self::returnError();
 
             $userId = OpenM_ID_Tool::getId($oid);
 
             if ($user->get(OpenM_UserDAO::USER_ID) != $userId)
-                OpenM_ID_Account::errorDisplay("this oid is not oid of connected user");
+                self::returnError();
 
             OpenM_Log::debug("create token for $userId", __CLASS__, __METHOD__, __LINE__);
             $token = OpenM_Crypto::hash(self::$hashAlgo, OpenM_URL::encode(self::$secret . Auth_OpenID_CryptUtil::randomString(200) . $oid . self::$secret));
@@ -157,24 +160,13 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
             try {
                 $response = self::$server->handleRequest($request);
             } catch (Exception $exc) {
-                OpenM_Log::error($exc->getMessage(), __CLASS__, __METHOD__, __LINE__);
-                OpenM_ID_Account::errorDisplay();
+                OpenM_Log::error($exc->getTraceAsString(), __CLASS__, __METHOD__, __LINE__);
+                self::returnError();
             }
         }
 
         $webResponse = self::$server->encodeResponse($response);
-
-        if ($webResponse->code != AUTH_OPENID_HTTP_OK) {
-            header(sprintf("HTTP/1.1 %d ", $webResponse->code), true, $webResponse->code);
-        }
-
-        foreach ($webResponse->headers as $k => $v) {
-            header("$k: $v");
-        }
-
-        header("Connection: close");
-        print $webResponse->body;
-        exit(0);
+        self::finalyzeRequest($webResponse);
     }
 
     private static function isOIDValid($oid) {
@@ -189,6 +181,25 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
         if (!RegExp::ereg("^\?" . OpenM_ID::URI_API . "=[a-f0-9]+$", $oidParameter))
             return false;
         return true;
+    }
+
+    private static function returnError() {
+        $error = new Auth_OpenID_WebResponse(AUTH_OPENID_HTTP_ERROR);
+        self::finalyzeRequest($error);
+    }
+
+    private static function finalyzeRequest($webResponse) {
+        if ($webResponse->code != AUTH_OPENID_HTTP_OK) {
+            header(sprintf("HTTP/1.1 %d ", $webResponse->code), true, $webResponse->code);
+        }
+
+        foreach ($webResponse->headers as $k => $v) {
+            header("$k: $v");
+        }
+
+        header("Connection: close");
+        print $webResponse->body;
+        exit(0);
     }
 
 }
