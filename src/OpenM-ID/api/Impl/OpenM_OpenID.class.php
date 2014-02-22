@@ -13,6 +13,7 @@ Import::php("util.Properties");
 Import::php("OpenM-ID.api.OpenM_ID_Tool");
 Import::php("OpenM-ID.api.Impl.OpenM_ID_ConnectedUserController");
 Import::php("util.OpenM_Log");
+Import::php("OpenM-ID.api.Impl.OpenM_ID_ReturnToController");
 
 $abs = Import::getAbsolutePath("Auth/OpenID/Server.php");
 if ($abs != null)
@@ -82,7 +83,6 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
 
     public static function handle() {
         self::init();
-
         $request = self::$server->decodeRequest();
 
         if (!$request) {
@@ -202,6 +202,63 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
         exit(0);
     }
 
-}
+    public static function uriDisplay() {
+        $id = $_GET[OpenM_ID::URI_API];
+        ?>
+        <html>
+            <head>    
+                <link rel="openid.server openid2.provider" href="<?php echo OpenM_URL::getURLwithoutParameters(); ?>" />
+                <link rel="openid.delegate openid2.local_id" href="<?php echo OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $id; ?>" />
+            </head>
+            <body>
+                <h1>OpenM-ID server v<?php echo OpenM_IDImpl::VERSION; ?> : OpenID</h1>
+                Hello <?php echo $id; ?>
+                <br>
+            </body>
+        </html>
+        <?php
+        die();
+    }
 
+    public static function getOpenID() {
+        $returnTo = new OpenM_ID_ReturnToController();
+        if (!$returnTo->isReturnTo())
+            die("No return_to parameter found");
+
+        $return_to = $returnTo->getReturnTo();
+
+        if (RegExp::ereg(OpenM_ID::OID_PARAMETER . "=", $return_to)) {
+            exit(0);
+        }
+
+        if (RegExp::ereg(str_replace("www.", "", OpenM_ID::OID_PARAMETER . "="), $return_to)) {
+            OpenM_Header::error(400);
+        }
+
+        $user = OpenM_ID_ConnectedUserController::get();
+
+        if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null)
+            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . (isset($_GET[self::EMBEDED_PARAMETER]) ? self::EMBEDED_PARAMETER . "&" : "") . OpenM_ID::LOGIN_API . "&return_to=" . OpenM_URL::encode());
+
+        if (RegExp::ereg("\?", $return_to))
+            $return_to .= "&" . OpenM_ID::OID_PARAMETER . "=";
+        else
+            $return_to .= "?" . OpenM_ID::OID_PARAMETER . "=";
+
+        $return_to .= (isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null) ? OpenM_SSO::RETURN_ERROR_MESSAGE_NOT_CONNECTED_VALUE : OpenM_URL::encode(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $user->get(OpenM_UserDAO::USER_ID));
+
+        OpenM_Header::redirect($return_to);
+    }
+
+    public static function logout() {
+        OpenM_ID_ConnectedUserController::remove();
+        $returnTo = new OpenM_ID_ReturnToController();
+        if ($returnTo->isReturnTo())
+            $returnTo->returnTo();
+        else {
+            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . OpenM_ID::LOGIN_API);
+        }
+    }
+
+}
 ?>
