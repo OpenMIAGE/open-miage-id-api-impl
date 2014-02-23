@@ -33,7 +33,7 @@ Import::php('Auth/OpenID/CryptUtil.php');
  * @subpackage OpenM\OpenM-ID\api\Impl 
  * @author Gaël Saunier
  */
-class OpenM_OpenID extends OpenM_ServiceImpl {
+class OpenM_ID_OpenID extends OpenM_ServiceImpl {
 
     const SPECIFIC_CONFIG_FILE_NAME = "OpenM_OpenID.config.file.path";
     const STORE_PATH = "OpenM_OpenID.store.path";

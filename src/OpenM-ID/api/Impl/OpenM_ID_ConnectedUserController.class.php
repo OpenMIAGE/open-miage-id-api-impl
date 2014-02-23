@@ -32,7 +32,7 @@ class OpenM_ID_ConnectedUserController {
         if (self::$session_validity != null)
             return;
         $p = Properties::fromFile(OpenM_IDImpl::CONFIG_FILE_NAME);
-        $path = $p->get(OpenM_IDImpl::SPECIFIC_CONFIG_FILE_NAME);
+        $path = OpenM_SERVICE_CONFIG_DIRECTORY . "/" . $p->get(OpenM_IDImpl::SPECIFIC_CONFIG_FILE_NAME);
         if ($path == null)
             throw new OpenM_ServiceImplException(OpenM_IDImpl::SPECIFIC_CONFIG_FILE_NAME . " property is not defined in " . self::CONFIG_FILE_NAME);
         $p2 = Properties::fromFile($path);
@@ -49,12 +49,12 @@ class OpenM_ID_ConnectedUserController {
             throw new OpenM_ServiceImplException(OpenM_IDImpl::HASH_ALGO . " property is not a valid crypto algo in $path");
     }
 
-    public static function get() {
+    public function get() {
         self::init();
         $user = OpenM_SessionController::get(self::USER);
         $now = new Date();
-        if (is_array($user)) {
-            OpenM_Log::debug("user $user found", __CLASS__, __METHOD__, __LINE__);
+        if ($user instanceof HashtableString) {
+            OpenM_Log::debug("user found", __CLASS__, __METHOD__, __LINE__);
             $user_session_begin_time = OpenM_SessionController::get(self::BEGIN_TIME);
             OpenM_Log::debug("session started from $user_session_begin_time", __CLASS__, __METHOD__, __LINE__);
             $sessionId = OpenM_SessionController::get(self::SESSION_ID);
@@ -62,40 +62,40 @@ class OpenM_ID_ConnectedUserController {
             $begin_time = new Date(self::$user_session_begin_time);
             if ($begin_time->plus(self::$session_validity)->compareTo($now) > 0) {
                 OpenM_Log::debug("user session OK", __CLASS__, __METHOD__, __LINE__);
-                return HashtableString::from($user);
+                return $user;
             } else {
-                self::remove($sessionId);
+                $this->remove($sessionId);
                 return null;
             }
         } else if (OpenM_CookiesController::contains(self::COOKIE_NAME)) {
             $sessionId = OpenM_CookiesController::get(self::COOKIE_NAME);
             OpenM_Log::debug("session $sessionId found in cookies", __CLASS__, __METHOD__, __LINE__);
             $userSessionDAO = new OpenM_UserSessionDAO();
-            $session = $userSessionDAO->get($sessionId, self::getClientIp());
+            $session = $userSessionDAO->get($sessionId, $this->getClientIp());
             if ($session == null) {
                 OpenM_Log::debug("$sessionId not found in DAO", __CLASS__, __METHOD__, __LINE__);
-                self::remove($sessionId);
+                $this->remove($sessionId);
                 return null;
             }
             $begin_time = $session->get(OpenM_UserSessionDAO::SESSION_BEGIN_TIME);
             if ($begin_time->plus(self::$session_validity)->compareTo($now) < 0) {
                 OpenM_Log::debug("session $sessionId expired", __CLASS__, __METHOD__, __LINE__);
-                self::remove($sessionId);
+                $this->remove($sessionId);
                 return null;
             }
             $userDAO = new OpenM_UserDAO();
             $user = $userDAO->get($session->get(OpenM_UserSessionDAO::USER_ID));
             if ($user == null) {
                 OpenM_Log::debug("user of session not found", __CLASS__, __METHOD__, __LINE__);
-                self::remove($sessionId);
+                $this->remove($sessionId);
                 return null;
             }
             if (!$user->get(OpenM_UserDAO::USER_IS_VALID)) {
                 OpenM_Log::debug("user of session not valid", __CLASS__, __METHOD__, __LINE__);
-                self::remove($sessionId);
+                $this->remove($sessionId);
                 return null;
             }
-            OpenM_SessionController::set(self::USER, $user->toArray());
+            OpenM_SessionController::set(self::USER, $user);
             OpenM_SessionController::set(self::BEGIN_TIME, $session->get(OpenM_UserSessionDAO::SESSION_BEGIN_TIME)->getTime());
             OpenM_SessionController::set(self::SESSION_ID, $session->get(OpenM_UserSessionDAO::SESSION_ID));
             OpenM_Log::debug("user saved in SESSION", __CLASS__, __METHOD__, __LINE__);
@@ -105,17 +105,17 @@ class OpenM_ID_ConnectedUserController {
             OpenM_Log::debug("no user found", __CLASS__, __METHOD__, __LINE__);
     }
 
-    public static function set(HashtableString $user, $rememberMe = true) {
+    public function set(HashtableString $user, $rememberMe = true) {
         self::init();
         OpenM_Log::debug("Create new session", __CLASS__, __METHOD__, __LINE__);
         $userSessionDAO = new OpenM_UserSessionDAO();
-        $userIp_hash = self::getClientIp();
+        $userIp_hash = $this->getClientIp();
         OpenM_Log::debug("Remove ghost user if exists", __CLASS__, __METHOD__, __LINE__);
         $userSessionDAO->removeUser($user->get(OpenM_UserDAO::USER_ID), $userIp_hash);
         $sessionId = OpenM_Crypto::hash(self::$hashAlgo, "" . self::$secret . (microtime(true)) . $userIp_hash . self::$secret);
         $userSessionDAO->create($sessionId, $user->get(OpenM_UserDAO::USER_ID), $userIp_hash);
         OpenM_Log::debug("session $sessionId created", __CLASS__, __METHOD__, __LINE__);
-        OpenM_SessionController::set(self::USER, $user->toArray());
+        OpenM_SessionController::set(self::USER, $user);
         OpenM_SessionController::set(self::SESSION_ID, $sessionId);
         $now = new Date();
         if ($rememberMe) {
@@ -127,7 +127,7 @@ class OpenM_ID_ConnectedUserController {
         OpenM_Log::debug("session $sessionId saved in SESSION", __CLASS__, __METHOD__, __LINE__);
     }
 
-    public static function remove($sessionId = null) {
+    public function remove($sessionId = null) {
         self::init();
         if ($sessionId == null)
             $sessionId = OpenM_SessionController::get(self::SESSION_ID);
@@ -146,7 +146,7 @@ class OpenM_ID_ConnectedUserController {
         }
     }
 
-    private static function getClientIp() {
+    private function getClientIp() {
         return OpenM_Server::getClientIpCrypted(self::$hashAlgo, self::$secret . $_SERVER['HTTP_USER_AGENT']);
     }
 
