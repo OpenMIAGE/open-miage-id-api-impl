@@ -1,5 +1,4 @@
 <?php
-
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_UserDAO");
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_TokenDAO");
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_SiteDAO");
@@ -11,9 +10,9 @@ Import::php("util.http.OpenM_URL");
 Import::php("OpenM-Services.api.Impl.OpenM_ServiceImpl");
 Import::php("util.Properties");
 Import::php("OpenM-ID.api.OpenM_ID_Tool");
-Import::php("OpenM-ID.api.Impl.OpenM_ID_Account");
 Import::php("OpenM-ID.api.Impl.OpenM_ID_ConnectedUserController");
 Import::php("util.OpenM_Log");
+Import::php("OpenM-ID.api.Impl.OpenM_ID_ReturnToController");
 
 $abs = Import::getAbsolutePath("Auth/OpenID/Server.php");
 if ($abs != null)
@@ -33,7 +32,7 @@ Import::php('Auth/OpenID/CryptUtil.php');
  * @subpackage OpenM\OpenM-ID\api\Impl 
  * @author Gaël Saunier
  */
-class OpenM_OpenID extends OpenM_ServiceImpl {
+class OpenM_ID_OpenID extends OpenM_ServiceImpl {
 
     const SPECIFIC_CONFIG_FILE_NAME = "OpenM_OpenID.config.file.path";
     const STORE_PATH = "OpenM_OpenID.store.path";
@@ -42,6 +41,10 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
     const TOKEN_DEFAULT_ACTIVATION = "OpenM_OpenID.token.activation.default";
     const TOKEN_DEFAULT_ACTIVATION_TRUE = "true";
 
+    /**
+     *
+     * @var type Auth_OpenID_Server
+     */
     private static $server;
     private static $init = false;
     private static $secret;
@@ -54,7 +57,7 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
             $path = $p->get(self::SPECIFIC_CONFIG_FILE_NAME);
             if ($path == null)
                 throw new OpenM_ServiceImplException(self::SPECIFIC_CONFIG_FILE_NAME . " property is missing in " . self::SPECIFIC_CONFIG_FILE_NAME);
-            $p2 = Properties::fromFile($path);
+            $p2 = Properties::fromFile(dirname(self::CONFIG_FILE_NAME) . "/" . $path);
             $path2 = $p2->get(self::STORE_PATH);
             if ($path2 == null)
                 throw new OpenM_ServiceImplException(self::STORE_PATH . " property is not defined in $path");
@@ -79,7 +82,6 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
 
     public static function handle() {
         self::init();
-
         $request = self::$server->decodeRequest();
 
         if (!$request) {
@@ -94,14 +96,14 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
             OpenM_Log::debug("Identity check", __CLASS__, __METHOD__, __LINE__);
             $user = OpenM_ID_ConnectedUserController::get();
             if ($user == null)
-                OpenM_ID_Account::errorDisplay("no user connected");
+                self::returnError();
             if (!$user->get(OpenM_UserDAO::USER_IS_VALID))
-                OpenM_ID_Account::errorDisplay("user not valid");
+                self::returnError();
 
             $userId = OpenM_ID_Tool::getId($oid);
 
             if ($user->get(OpenM_UserDAO::USER_ID) != $userId)
-                OpenM_ID_Account::errorDisplay("this oid is not oid of connected user");
+                self::returnError();
 
             OpenM_Log::debug("create token for $userId", __CLASS__, __METHOD__, __LINE__);
             $token = OpenM_Crypto::hash(self::$hashAlgo, OpenM_URL::encode(self::$secret . Auth_OpenID_CryptUtil::randomString(200) . $oid . self::$secret));
@@ -157,24 +159,13 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
             try {
                 $response = self::$server->handleRequest($request);
             } catch (Exception $exc) {
-                OpenM_Log::error($exc->getMessage(), __CLASS__, __METHOD__, __LINE__);
-                OpenM_ID_Account::errorDisplay();
+                OpenM_Log::error($exc->getTraceAsString(), __CLASS__, __METHOD__, __LINE__);
+                self::returnError();
             }
         }
 
         $webResponse = self::$server->encodeResponse($response);
-
-        if ($webResponse->code != AUTH_OPENID_HTTP_OK) {
-            header(sprintf("HTTP/1.1 %d ", $webResponse->code), true, $webResponse->code);
-        }
-
-        foreach ($webResponse->headers as $k => $v) {
-            header("$k: $v");
-        }
-
-        header("Connection: close");
-        print $webResponse->body;
-        exit(0);
+        self::finalyzeRequest($webResponse);
     }
 
     private static function isOIDValid($oid) {
@@ -191,6 +182,82 @@ class OpenM_OpenID extends OpenM_ServiceImpl {
         return true;
     }
 
-}
+    private static function returnError() {
+        $error = new Auth_OpenID_WebResponse(AUTH_OPENID_HTTP_ERROR);
+        self::finalyzeRequest($error);
+    }
 
+    private static function finalyzeRequest($webResponse) {
+        if ($webResponse->code != AUTH_OPENID_HTTP_OK) {
+            header(sprintf("HTTP/1.1 %d ", $webResponse->code), true, $webResponse->code);
+        }
+
+        foreach ($webResponse->headers as $k => $v) {
+            header("$k: $v");
+        }
+
+        header("Connection: close");
+        print $webResponse->body;
+        exit(0);
+    }
+
+    public static function uriDisplay() {
+        $id = $_GET[OpenM_ID::URI_API];
+        ?>
+        <html>
+            <head>    
+                <link rel="openid.server openid2.provider" href="<?php echo OpenM_URL::getURLwithoutParameters(); ?>" />
+                <link rel="openid.delegate openid2.local_id" href="<?php echo OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $id; ?>" />
+            </head>
+            <body>
+                <h1>OpenM-ID server v<?php echo OpenM_IDImpl::VERSION; ?> : OpenID</h1>
+                Hello <?php echo $id; ?>
+                <br>
+            </body>
+        </html>
+        <?php
+        die();
+    }
+
+    public static function getOpenID() {
+        $returnTo = new OpenM_ID_ReturnToController();
+        if (!$returnTo->isReturnTo())
+            die("No return_to parameter found");
+
+        $return_to = $returnTo->getReturnTo();
+
+        if (RegExp::ereg(OpenM_ID::OID_PARAMETER . "=", $return_to)) {
+            exit(0);
+        }
+
+        if (RegExp::ereg(str_replace("www.", "", OpenM_ID::OID_PARAMETER . "="), $return_to)) {
+            OpenM_Header::error(400);
+        }
+
+        $user = OpenM_ID_ConnectedUserController::get();
+
+        if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null)
+            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . (isset($_GET[self::EMBEDED_PARAMETER]) ? self::EMBEDED_PARAMETER . "&" : "") . OpenM_ID::LOGIN_API . "&return_to=" . OpenM_URL::encode());
+
+        if (RegExp::ereg("\?", $return_to))
+            $return_to .= "&" . OpenM_ID::OID_PARAMETER . "=";
+        else
+            $return_to .= "?" . OpenM_ID::OID_PARAMETER . "=";
+
+        $return_to .= (isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null) ? OpenM_SSO::RETURN_ERROR_MESSAGE_NOT_CONNECTED_VALUE : OpenM_URL::encode(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $user->get(OpenM_UserDAO::USER_ID));
+
+        OpenM_Header::redirect($return_to);
+    }
+
+    public static function logout() {
+        OpenM_ID_ConnectedUserController::remove();
+        $returnTo = new OpenM_ID_ReturnToController();
+        if ($returnTo->isReturnTo())
+            $returnTo->returnTo();
+        else {
+            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . OpenM_ID::LOGIN_API);
+        }
+    }
+
+}
 ?>
