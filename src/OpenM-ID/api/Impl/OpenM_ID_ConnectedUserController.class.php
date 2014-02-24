@@ -7,6 +7,7 @@ Import::php("OpenM-ID.api.Impl.DAO.OpenM_UserSessionDAO");
 Import::php("OpenM-ID.api.Impl.OpenM_IDImpl");
 Import::php("util.time.Delay");
 Import::php("util.time.Date");
+Import::php("util.http.OpenM_Server");
 
 /**
  * Description of OpenM_ID_UserController

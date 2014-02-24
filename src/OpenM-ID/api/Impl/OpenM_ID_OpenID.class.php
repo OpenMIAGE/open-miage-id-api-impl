@@ -1,5 +1,4 @@
 <?php
-
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_UserDAO");
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_TokenDAO");
 Import::php("OpenM-ID.api.Impl.DAO.OpenM_SiteDAO");
@@ -58,7 +57,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
             $path = $p->get(self::SPECIFIC_CONFIG_FILE_NAME);
             if ($path == null)
                 throw new OpenM_ServiceImplException(self::SPECIFIC_CONFIG_FILE_NAME . " property is missing in " . self::SPECIFIC_CONFIG_FILE_NAME);
-            $p2 = Properties::fromFile($path);
+            $p2 = Properties::fromFile(dirname(self::CONFIG_FILE_NAME) . "/" . $path);
             $path2 = $p2->get(self::STORE_PATH);
             if ($path2 == null)
                 throw new OpenM_ServiceImplException(self::STORE_PATH . " property is not defined in $path");
