@@ -11,12 +11,12 @@ Import::php("util.session.OpenM_SessionController");
  * @author Gaël Saunier
  */
 class OpenM_ID_ReturnToController {
-    
+
     const RETURN_TO_IN_SESSION = "OpenM_ID.return_to";
-    
+
     public function returnTo() {
         if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]))
-            OpenM_Header::redirect(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::LOGIN_API . (($this->isReturnTo()) ? "&return_to=" . $this->getReturnTo() : ""));
+            OpenM_Header::redirect(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::LOGIN_API . (($this->isReturnTo()) ? ( "&return_to=" . OpenM_URL::encode($this->getReturnTo())) : ""));
         else if ($this->isReturnTo())
             OpenM_Header::redirect($this->getReturnTo());
         else {
@@ -47,15 +47,23 @@ class OpenM_ID_ReturnToController {
             $returnTo = OpenM_SessionController::get(self::RETURN_TO_IN_SESSION);
 
         OpenM_SessionController::set(self::RETURN_TO_IN_SESSION, $returnTo);
-        $this->returnTo = OpenM_URL::decode($returnTo);
+        if ($returnTo !== null)
+            $this->returnTo = OpenM_URL::decode($returnTo);
 
         return $this->returnTo;
     }
-
-    public function isReturnTo() {
-        return $this->getReturnTo() != null;
+    
+    public function getReturnToInURL(){
+        return "return_to=" . OpenM_URL::encode($this->getReturnTo());
     }
 
+    public function isReturnTo() {
+        return $this->getReturnTo() !== null;
+    }
+
+    public function save(){
+        return $this->isReturnTo();
+    }
 }
 
 ?>
