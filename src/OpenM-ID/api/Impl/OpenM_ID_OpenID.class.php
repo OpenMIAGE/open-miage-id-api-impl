@@ -1,8 +1,5 @@
 <?php
-Import::php("OpenM-ID.api.Impl.DAO.OpenM_UserDAO");
-Import::php("OpenM-ID.api.Impl.DAO.OpenM_TokenDAO");
-Import::php("OpenM-ID.api.Impl.DAO.OpenM_SiteDAO");
-Import::php("OpenM-ID.api.Impl.DAO.OpenM_Data_Access_RightsDAO");
+Import::php("OpenM-ID.api.Impl.DAO.*");
 Import::php("OpenM-SSO.api.OpenM_SSO");
 Import::php("OpenM-Controller.api.OpenM_RESTController");
 Import::php("util.crypto.OpenM_Crypto");
@@ -45,14 +42,21 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
      *
      * @var type Auth_OpenID_Server
      */
-    private static $server;
-    private static $init = false;
-    private static $secret;
-    private static $hashAlgo;
-    private static $tokenDefaultActivation = false;
+    private $server;
+    private $init = false;
+    private $secret;
+    private $hashAlgo;
+    private $tokenDefaultActivation = false;
+    private $returnTo;
+    private $userController;
 
-    private static function init() {
-        if (!self::$init) {
+    public function __construct() {
+        $this->returnTo = new OpenM_ID_ReturnToController();
+        $this->userController = new OpenM_ID_ConnectedUserController();
+    }
+
+    private function init() {
+        if (!$this->init) {
             $p = Properties::fromFile(self::CONFIG_FILE_NAME);
             $path = $p->get(self::SPECIFIC_CONFIG_FILE_NAME);
             if ($path == null)
@@ -64,25 +68,25 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
             $secret = $p2->get(self::HASH_SECRET);
             if ($secret == null)
                 throw new OpenM_ServiceImplException(self::HASH_SECRET . " property is not defined in $path");
-            self::$secret = $secret;
+            $this->secret = $secret;
             if ($p2->get(self::HASH_ALGO) == null)
                 throw new OpenM_ServiceImplException(self::HASH_ALGO . " property is not defined in $path");
-            self::$hashAlgo = $p2->get(self::HASH_ALGO);
-            if (!OpenM_Crypto::isAlgoValid(self::$hashAlgo))
+            $this->hashAlgo = $p2->get(self::HASH_ALGO);
+            if (!OpenM_Crypto::isAlgoValid($this->hashAlgo))
                 throw new OpenM_ServiceImplException(self::HASH_ALGO . " property is not a valid crypto algo in $path");
             $server = new Auth_OpenID_Server(new Auth_OpenID_FileStore($p2->get(self::STORE_PATH)), OpenM_URL::getDirURL());
-            self::$server = $server;
-            self::$init = true;
-            self::$tokenDefaultActivation = ($p2->get(self::TOKEN_DEFAULT_ACTIVATION) == self::TOKEN_DEFAULT_ACTIVATION_TRUE);
+            $this->server = $server;
+            $this->init = true;
+            $this->tokenDefaultActivation = ($p2->get(self::TOKEN_DEFAULT_ACTIVATION) == self::TOKEN_DEFAULT_ACTIVATION_TRUE);
 
             if ($p->get(self::LOG_MODE_PROPERTY) == self::LOG_MODE_ACTIVATED)
                 OpenM_Log::init($p->get(self::LOG_PATH_PROPERTY), $p->get(self::LOG_LEVEL_PROPERTY), $p->get(self::LOG_FILE_NAME), $p->get(self::LOG_LINE_MAX_SIZE));
         }
     }
 
-    public static function handle() {
-        self::init();
-        $request = self::$server->decodeRequest();
+    public function handle() {
+        $this->init();
+        $request = $this->server->decodeRequest();
 
         if (!$request) {
             OpenM_RESTDefaultServer::handle(array("OpenM_ID"));
@@ -91,22 +95,22 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
 
         OpenM_Log::debug("request=" . $_SERVER["REQUEST_URI"], __CLASS__, __METHOD__, __LINE__);
         OpenM_Log::debug("waited parameters: mode=" . $request->mode . " identity=" . $request->identity . " immediate=" . $request->immediate . " claimed_id=" . $request->claimed_id, __CLASS__, __METHOD__, __LINE__);
-        if ($request->mode == 'checkid_setup' && $request->identity && !$request->immediate && (self::isOIDValid($request->claimed_id) || self::isOIDValid($request->identity))) {
+        if ($request->mode == 'checkid_setup' && $request->identity && !$request->immediate && (self::isOIDValid($request->claimed_id) || $this->isOIDValid($request->identity))) {
             $oid = (String::isString($request->claimed_id) && $request->claimed_id !== "") ? $request->claimed_id : $request->identity;
             OpenM_Log::debug("Identity check", __CLASS__, __METHOD__, __LINE__);
-            $user = OpenM_ID_ConnectedUserController::get();
+            $user = $this->userController->get();
             if ($user == null)
-                self::returnError();
+                $this->returnError();
             if (!$user->get(OpenM_UserDAO::USER_IS_VALID))
-                self::returnError();
+                $this->returnError();
 
             $userId = OpenM_ID_Tool::getId($oid);
 
             if ($user->get(OpenM_UserDAO::USER_ID) != $userId)
-                self::returnError();
+                $this->returnError();
 
             OpenM_Log::debug("create token for $userId", __CLASS__, __METHOD__, __LINE__);
-            $token = OpenM_Crypto::hash(self::$hashAlgo, OpenM_URL::encode(self::$secret . Auth_OpenID_CryptUtil::randomString(200) . $oid . self::$secret));
+            $token = OpenM_Crypto::hash($this->hashAlgo, OpenM_URL::encode($this->secret . Auth_OpenID_CryptUtil::randomString(200) . $oid . $this->secret));
             $token .= "_" . microtime(true);
 
             $tokenDAO = new OpenM_TokenDAO();
@@ -125,7 +129,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
             $dataDAO = new OpenM_Data_Access_RightsDAO();
 
             OpenM_Log::debug("add token in sreg", __CLASS__, __METHOD__, __LINE__);
-            if (self::$tokenDefaultActivation) {
+            if ($this->tokenDefaultActivation) {
                 OpenM_Log::debug("token added by default activated", __CLASS__, __METHOD__, __LINE__);
                 $sreg_data[OpenM_ID::TOKEN_PARAMETER] = $token;
             } else {
@@ -157,18 +161,18 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
         } else {
             OpenM_Log::debug("Default request treatment", __CLASS__, __METHOD__, __LINE__);
             try {
-                $response = self::$server->handleRequest($request);
+                $response = $this->server->handleRequest($request);
             } catch (Exception $exc) {
                 OpenM_Log::error($exc->getTraceAsString(), __CLASS__, __METHOD__, __LINE__);
-                self::returnError();
+                $this->returnError();
             }
         }
 
-        $webResponse = self::$server->encodeResponse($response);
-        self::finalyzeRequest($webResponse);
+        $webResponse = $this->server->encodeResponse($response);
+        $this->finalyzeRequest($webResponse);
     }
 
-    private static function isOIDValid($oid) {
+    private function isOIDValid($oid) {
         if (!OpenM_URL::isValid($oid))
             return false;
         $api = OpenM_URL::getURLWithoutHttpAndWww();
@@ -182,12 +186,12 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
         return true;
     }
 
-    private static function returnError() {
+    private function returnError() {
         $error = new Auth_OpenID_WebResponse(AUTH_OPENID_HTTP_ERROR);
-        self::finalyzeRequest($error);
+        $this->finalyzeRequest($error);
     }
 
-    private static function finalyzeRequest($webResponse) {
+    private function finalyzeRequest($webResponse) {
         if ($webResponse->code != AUTH_OPENID_HTTP_OK) {
             header(sprintf("HTTP/1.1 %d ", $webResponse->code), true, $webResponse->code);
         }
@@ -201,7 +205,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
         exit(0);
     }
 
-    public static function uriDisplay() {
+    public function uriDisplay() {
         $id = $_GET[OpenM_ID::URI_API];
         ?>
         <html>
@@ -219,12 +223,11 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
         die();
     }
 
-    public static function getOpenID() {
-        $returnTo = new OpenM_ID_ReturnToController();
-        if (!$returnTo->isReturnTo())
+    public function getOpenID() {
+        if (!$this->returnTo->isReturnTo())
             die("No return_to parameter found");
 
-        $return_to = $returnTo->getReturnTo();
+        $return_to = $this->returnTo->getReturnTo();
 
         if (RegExp::ereg(OpenM_ID::OID_PARAMETER . "=", $return_to)) {
             exit(0);
@@ -234,7 +237,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
             OpenM_Header::error(400);
         }
 
-        $user = OpenM_ID_ConnectedUserController::get();
+        $user = $this->userController->get();
 
         if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null)
             OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . (isset($_GET[self::EMBEDED_PARAMETER]) ? self::EMBEDED_PARAMETER . "&" : "") . OpenM_ID::LOGIN_API . "&return_to=" . OpenM_URL::encode());
@@ -246,15 +249,14 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
 
         $return_to .= (isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null) ? OpenM_SSO::RETURN_ERROR_MESSAGE_NOT_CONNECTED_VALUE : OpenM_URL::encode(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $user->get(OpenM_UserDAO::USER_ID));
 
-        OpenM_Header::redirect($return_to);
+        $this->returnTo->returnTo();
     }
 
-    public static function logout() {
-        OpenM_ID_ConnectedUserController::remove();
-        $returnTo = new OpenM_ID_ReturnToController();
-        if ($returnTo->isReturnTo())
-            $returnTo->returnTo();
-        else {
+    public function logout($redirectToLogin = true) {
+        $this->userController->remove();
+        if ($this->returnTo->isReturnTo())
+            $this->returnTo->returnTo();
+        else if ($redirectToLogin) {
             OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . OpenM_ID::LOGIN_API);
         }
     }
