@@ -240,7 +240,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
         $user = $this->userController->get();
 
         if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null)
-            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . (isset($_GET[self::EMBEDED_PARAMETER]) ? self::EMBEDED_PARAMETER . "&" : "") . OpenM_ID::LOGIN_API . "&return_to=" . OpenM_URL::encode());
+            OpenM_Header::redirect(OpenM_URL::getDirURL() . "?" . OpenM_ID::LOGIN_API . "&return_to=" . OpenM_URL::encode(substr(OpenM_URL::getURL(), strlen(OpenM_URL::getHost()))));
 
         if (RegExp::ereg("\?", $return_to))
             $return_to .= "&" . OpenM_ID::OID_PARAMETER . "=";
@@ -249,7 +249,7 @@ class OpenM_ID_OpenID extends OpenM_ServiceImpl {
 
         $return_to .= (isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]) && $user == null) ? OpenM_SSO::RETURN_ERROR_MESSAGE_NOT_CONNECTED_VALUE : OpenM_URL::encode(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::URI_API . "=" . $user->get(OpenM_UserDAO::USER_ID));
 
-        $this->returnTo->returnTo();
+        OpenM_Header::redirect($return_to);
     }
 
     public function logout($redirectToLogin = true) {

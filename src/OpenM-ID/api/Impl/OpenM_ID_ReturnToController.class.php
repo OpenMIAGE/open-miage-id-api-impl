@@ -52,8 +52,8 @@ class OpenM_ID_ReturnToController {
 
         return $this->returnTo;
     }
-    
-    public function getReturnToInURL(){
+
+    public function getReturnToInURL() {
         return "return_to=" . OpenM_URL::encode($this->getReturnTo());
     }
 
@@ -61,9 +61,18 @@ class OpenM_ID_ReturnToController {
         return $this->getReturnTo() !== null;
     }
 
-    public function save(){
+    public function save($returnTo = null) {
+        if ($returnTo !== null) {
+            $this->returnTo = $returnTo;
+            OpenM_SessionController::set(self::RETURN_TO_IN_SESSION, $returnTo);
+        }
         return $this->isReturnTo();
     }
+
+    public function removeFromSession() {
+        OpenM_SessionController::remove(self::RETURN_TO_IN_SESSION);
+    }
+
 }
 
 ?>
