@@ -17,9 +17,10 @@ class OpenM_ID_ReturnToController {
     public function returnTo() {
         if (!isset($_GET[OpenM_ID::NO_REDIRECT_TO_LOGIN_PARAMETER]))
             OpenM_Header::redirect(OpenM_URL::getURLwithoutParameters() . "?" . OpenM_ID::LOGIN_API . (($this->isReturnTo()) ? ( "&return_to=" . OpenM_URL::encode($this->getReturnTo())) : ""));
-        else if ($this->isReturnTo())
+        else if ($this->isReturnTo()) {
+            $this->removeFromSession();
             OpenM_Header::redirect($this->getReturnTo());
-        else {
+        } else {
             OpenM_Log::warning("returnTo called without return_to parameter");
             die("internal error occur");
         }
