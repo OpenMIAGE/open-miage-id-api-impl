@@ -15,18 +15,18 @@ class OpenM_UserSessionDAO extends OpenM_ID_DAO {
     const USER_ID = "user_id";
     const SESSION_ID = "session_id";
     const SESSION_BEGIN_TIME = "begin_time";
-    const USER_IP_HASH = "ip_hash";
+    const USER_HASH = "ip_hash";
 
-    public function get($sessionId, $userIp_hash = null) {
-        OpenM_Log::debug($sessionId . " ($userIp_hash)", __CLASS__, __METHOD__, __LINE__);
-        if ($userIp_hash == null)
+    public function get($sessionId, $hash = null) {
+        OpenM_Log::debug($sessionId . " ($hash)", __CLASS__, __METHOD__, __LINE__);
+        if ($hash == null)
             $return = self::$db->request_fetch_HashtableString(OpenM_DB::select(self::USER_SESSION_TABLE_NAME, array(
                         self::SESSION_ID => $sessionId
                     )));
         else
             $return = self::$db->request_fetch_HashtableString(OpenM_DB::select(self::USER_SESSION_TABLE_NAME, array(
                         self::SESSION_ID => $sessionId,
-                        self::USER_IP_HASH => $userIp_hash
+                        self::USER_HASH => $hash
                     )));
         if ($return == null)
             return;
@@ -40,11 +40,11 @@ class OpenM_UserSessionDAO extends OpenM_ID_DAO {
         return true;
     }
 
-    public function removeUser($userId, $ip_hash) {
-        OpenM_Log::debug("$userId ($ip_hash)", __CLASS__, __METHOD__, __LINE__);
+    public function removeUser($userId, $hash) {
+        OpenM_Log::debug("$userId ($hash)", __CLASS__, __METHOD__, __LINE__);
         self::$db->request(OpenM_DB::delete(self::USER_SESSION_TABLE_NAME, array(
                     self::USER_ID => $userId,
-                    self::USER_IP_HASH => $ip_hash
+                    self::USER_HASH => $hash
                 )));
         return true;
     }
@@ -55,13 +55,13 @@ class OpenM_UserSessionDAO extends OpenM_ID_DAO {
         return true;
     }
 
-    public function create($sessionId, $userId, $userIp_hash) {
-        OpenM_Log::debug("$sessionId, $userId, $userIp_hash", __CLASS__, __METHOD__, __LINE__);
+    public function create($sessionId, $userId, $hash) {
+        OpenM_Log::debug("$sessionId, $userId, $hash", __CLASS__, __METHOD__, __LINE__);
         self::$db->request(OpenM_DB::insert(self::USER_SESSION_TABLE_NAME, array(
                     self::SESSION_ID => $sessionId,
                     self::USER_ID => $userId,
                     self::SESSION_BEGIN_TIME => time(),
-                    self::USER_IP_HASH => $userIp_hash
+                    self::USER_HASH => $hash
                 )));
         return true;
     }

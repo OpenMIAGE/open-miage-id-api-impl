@@ -72,7 +72,7 @@ class OpenM_ID_ConnectedUserController {
             $sessionId = OpenM_CookiesController::get(self::COOKIE_NAME);
             OpenM_Log::debug("session $sessionId found in cookies", __CLASS__, __METHOD__, __LINE__);
             $userSessionDAO = new OpenM_UserSessionDAO();
-            $session = $userSessionDAO->get($sessionId, $this->getClientIp());
+            $session = $userSessionDAO->get($sessionId, $this->getClientHash());
             if ($session == null) {
                 OpenM_Log::debug("$sessionId not found in DAO", __CLASS__, __METHOD__, __LINE__);
                 $this->remove($sessionId);
@@ -110,11 +110,11 @@ class OpenM_ID_ConnectedUserController {
         self::init();
         OpenM_Log::debug("Create new session", __CLASS__, __METHOD__, __LINE__);
         $userSessionDAO = new OpenM_UserSessionDAO();
-        $userIp_hash = $this->getClientIp();
+        $clientHash = $this->getClientHash();
         OpenM_Log::debug("Remove ghost user if exists", __CLASS__, __METHOD__, __LINE__);
-        $userSessionDAO->removeUser($user->get(OpenM_UserDAO::USER_ID), $userIp_hash);
-        $sessionId = OpenM_Crypto::hash(self::$hashAlgo, "" . self::$secret . (microtime(true)) . $userIp_hash . self::$secret);
-        $userSessionDAO->create($sessionId, $user->get(OpenM_UserDAO::USER_ID), $userIp_hash);
+        $userSessionDAO->removeUser($user->get(OpenM_UserDAO::USER_ID), $clientHash);
+        $sessionId = OpenM_Crypto::hash(self::$hashAlgo, "" . self::$secret . (microtime(true)) . $clientHash . self::$secret);
+        $userSessionDAO->create($sessionId, $user->get(OpenM_UserDAO::USER_ID), $clientHash);
         OpenM_Log::debug("session $sessionId created", __CLASS__, __METHOD__, __LINE__);
         OpenM_SessionController::set(self::USER, $user);
         OpenM_SessionController::set(self::SESSION_ID, $sessionId);
@@ -147,8 +147,8 @@ class OpenM_ID_ConnectedUserController {
         }
     }
 
-    private function getClientIp() {
-        return OpenM_Server::getClientIpCrypted(self::$hashAlgo, self::$secret . $_SERVER['HTTP_USER_AGENT']);
+    private function getClientHash() {
+        return OpenM_Crypto::hash(self::$hashAlgo, self::$secret . $_SERVER['HTTP_USER_AGENT']);
     }
 
 }
