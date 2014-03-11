@@ -52,7 +52,7 @@ class OpenM_IDImpl extends OpenM_ServiceImpl implements OpenM_ID {
         $path = $p->get(self::SPECIFIC_CONFIG_FILE_NAME);
         if ($path == null)
             throw new OpenM_ServiceImplException(self::SPECIFIC_CONFIG_FILE_NAME . " property is not defined in " . self::CONFIG_FILE_NAME);
-        $this->properties = Properties::fromFile($path);
+        $this->properties = Properties::fromFile(dirname(self::CONFIG_FILE_NAME)."/".$path);
         if ($this->properties->get(self::HASH_SECRET) == null)
             throw new OpenM_ServiceImplException(self::HASH_SECRET . " property is not defined in $path");
         if ($this->properties->get(self::TOKEN_API_SESSION_VALIDITY) == null)
