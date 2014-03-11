@@ -120,7 +120,7 @@ class OpenM_ID_ConnectedUserController {
         OpenM_SessionController::set(self::SESSION_ID, $sessionId);
         $now = new Date();
         if ($rememberMe) {
-            OpenM_CookiesController::set(self::COOKIE_NAME, $sessionId, $now->plus(self::$session_validity)->getTime());
+            OpenM_CookiesController::set(self::COOKIE_NAME, $sessionId, $now->plus(self::$session_validity)->getTime(), "/");
             OpenM_Log::debug("session $sessionId saved in cookies", __CLASS__, __METHOD__, __LINE__);
         }
         $end = $now->plus(self::$session_validity);
